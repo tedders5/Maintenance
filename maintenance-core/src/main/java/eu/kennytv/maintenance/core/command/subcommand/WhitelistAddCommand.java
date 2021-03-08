@@ -23,9 +23,16 @@ import eu.kennytv.maintenance.core.command.CommandInfo;
 import eu.kennytv.maintenance.core.util.DummySenderInfo;
 import eu.kennytv.maintenance.core.util.SenderInfo;
 
+import java.io.IOException;
+import java.net.URL;
 import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
+
+import org.apache.commons.io.IOUtils;
+import org.json.simple.JSONObject;
+import org.json.simple.JSONValue;
+import org.json.simple.parser.ParseException;
 
 public final class WhitelistAddCommand extends CommandInfo {
 
@@ -67,7 +74,11 @@ public final class WhitelistAddCommand extends CommandInfo {
     private void addPlayerToWhitelist(final SenderInfo sender, final String name) {
         final SenderInfo selected = plugin.getOfflinePlayer(name);
         if (selected == null) {
-            sender.sendMessage(getMessage("playerNotOnline"));
+          //  sender.sendMessage(getMessage("playerNotOnline"));
+        	String stringUuid = getUuidFromMojang(sender, name);
+        	if (stringUuid == null) return;
+        	UUID uuid = UUID.fromString(stringUuid);
+        	addPlayerToWhitelist(sender, new DummySenderInfo(uuid, name));
             return;
         }
 
@@ -90,5 +101,33 @@ public final class WhitelistAddCommand extends CommandInfo {
         } else {
             sender.sendMessage(getMessage("whitelistAlreadyAdded").replace("%PLAYER%", selected.getName()));
         }
+    }
+    
+    /**
+     * returns the player UUID
+     * @param sender
+     * @param name
+     * @return player UUID as a String, null if not found
+     */
+    private String getUuidFromMojang(SenderInfo sender, String name) {
+        String url = "https://api.mojang.com/users/profiles/minecraft/" + name;
+        try {
+            @SuppressWarnings("deprecation")
+			String UUIDJson = IOUtils.toString(new URL(url));
+            if (UUIDJson.isEmpty()) {
+                sender.sendMessage(plugin.getPrefix() 
+                        + "§7Error: No such player found using Mojang's API. Is the service down?");
+                return null;
+            }
+            JSONObject UUIDObject = (JSONObject) JSONValue.parseWithException(UUIDJson);
+            return UUID.fromString(UUIDObject.get("id").toString().replaceFirst(
+                    "(\\p{XDigit}{8})(\\p{XDigit}{4})(\\p{XDigit}{4})(\\p{XDigit}{4})(\\p{XDigit}+)", "$1-$2-$3-$4-$5"))
+                    .toString();
+        } catch (IOException | ParseException e) {
+            e.printStackTrace();
+        }
+        sender.sendMessage(plugin.getPrefix() 
+                + "§7Error: No such player exists in the database.");
+        return null;
     }
 }
